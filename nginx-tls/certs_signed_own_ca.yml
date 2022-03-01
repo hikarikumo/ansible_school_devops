@@ -1,0 +1,105 @@
+---
+- hosts: localhost
+    # - nodes
+  gather_facts: True
+  become: true
+  become_method: sudo
+  become_user: ansible
+  vars:
+    nodes:
+        - node01
+        - node02
+    ansible_connection: local
+    domain_name: example.com
+    server_hostname: "{{ ansible_hostname }}.{{ domain_name }}"
+    certs_dir: certificates
+    ca_cert_key: certificates/ca-certificate.key
+    ca_cert: certificates/ca-certificate.pem
+    secret_ca_passphrase: VerySecretPassphrase2022
+
+
+  tasks:
+    - name: Check if the directory exists
+      ansible.builtin.stat:
+        path: "{{ certs_dir }}"
+      register: dir_to_check
+
+    - name: add directories if not exist
+      file:
+        path: "{{ certs_dir }}"
+        state: directory
+        mode: 0755
+        group: ansible
+        owner: ansible
+      when: dir_to_check.stat.exists == false
+
+    - name: Create private key with password protection
+      community.crypto.openssl_privatekey:
+        path: "{{ ca_cert_key }}"
+        passphrase: "{{ secret_ca_passphrase }}"
+        cipher: auto
+        size: 4096
+        type: RSA
+        backup: yes
+
+    - name: Create certificate signing request (CSR) for CA certificate
+      community.crypto.openssl_csr_pipe:
+        privatekey_path: "{{ ca_cert_key }}"
+        privatekey_passphrase: "{{ secret_ca_passphrase }}"
+        common_name: "{{ server_hostname }}"
+        use_common_name_for_san: true  # if false: since we do not specify SANs, don't use CN as a SAN
+        basic_constraints:
+          - 'CA:TRUE'
+        basic_constraints_critical: yes
+        key_usage:
+          - keyCertSign
+        key_usage_critical: true
+      register: ca_csr
+
+    - name: Create self-signed CA certificate from CSR
+      community.crypto.x509_certificate:
+        path: "{{ ca_cert }}"
+        csr_content: "{{ ca_csr.csr }}"
+        privatekey_path: "{{ ca_cert_key }}"
+        privatekey_passphrase: "{{ secret_ca_passphrase }}"
+        provider: selfsigned
+
+
+    - name: Create private key for new certificate for nodes
+      community.crypto.openssl_privatekey:
+        path: "{{ certs_dir }}/{{ item }}.key"
+        cipher: auto
+        passphrase:
+        size: 4096
+        type: RSA
+        backup: yes
+      register: private_key
+      loop: "{{ nodes }}"
+      
+
+    - name: Create certificate signing request (CSR) for new certificate for nodes
+      community.crypto.openssl_csr:
+        path: "{{ certs_dir }}/{{ item }}.csr"
+        privatekey_path: "{{ certs_dir }}/{{ item }}.key"
+        subject_alt_name:
+          - "DNS:{{ item }}.example.com"
+      loop: "{{ nodes }}"
+      
+
+    - name: Sign nodes certificates with our CA
+      community.crypto.x509_certificate:
+        path: "{{ certs_dir }}/{{ item }}.crt"
+        csr_path: "{{ certs_dir }}/{{ item }}.csr"
+        provider: ownca
+        ownca_path: "{{ ca_cert }}"
+        ownca_privatekey_path: "{{ ca_cert_key }}"
+        ownca_privatekey_passphrase: "{{ secret_ca_passphrase }}"
+        ownca_not_after: +365d  # valid for one year
+        ownca_not_before: "-1d"  # valid since yesterday
+      loop: "{{ nodes }}"
+
+    - name: Generate Diffie-Hellman parameters size (2048 bits)
+      community.crypto.openssl_dhparam:
+        path: "{{ certs_dir }}/{{ item }}.dhparams.pem"
+        size: 2048
+      loop: "{{ nodes }}"
