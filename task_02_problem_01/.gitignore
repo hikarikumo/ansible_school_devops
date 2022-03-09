@@ -1,0 +1,4 @@
+# test playbooks
+test*.yaml
+.vault_pass
+secret_key

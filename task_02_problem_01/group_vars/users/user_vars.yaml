@@ -1,0 +1,11 @@
+---
+users:
+  - name: "Joe the Uncachable"
+    username: "juncatch"
+    password: "{{ juncatch_vault_password }}"
+  - name: "White Rabbit"
+    username: "wrabbit"
+    password: "{{ wrabbit_vault_password }}"
+  - name: "Tyler Durden"
+    username: "tdurden"
+    password: "{{ tdurden_vault_password }}"

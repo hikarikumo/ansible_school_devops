@@ -1,0 +1,26 @@
+---
+- hosts: nodes
+  gather_facts: true
+  become: true
+  become_method: sudo
+  become_user: root
+  vars_files:
+    - group_vars/users/user_vars.yaml
+    - group_vars/users/vault.yaml
+    - group_vars/vars.yaml
+
+  tasks:
+    - name: Create users
+      user:
+        name: "{{ item.username }}"
+        password: "{{ item.password | password_hash('sha512') }}"
+        state: present
+        shell: /bin/bash
+        system: no        
+        createhome: yes
+        home: "/home/{{ item.username }}"
+        comment: "Ansible-generated user"
+      loop: "{{ users }}"
+      loop_control:
+        pause: 5
+      no_log: true
