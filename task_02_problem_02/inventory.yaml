@@ -1,0 +1,11 @@
+all:
+  hosts:
+    localhost:
+      ansible_connection: local
+    node[01:02].example.com:
+      ansible_connection: ssh
+  children:
+    nodes:
+      hosts:
+        node[01:02].example.com:
+
