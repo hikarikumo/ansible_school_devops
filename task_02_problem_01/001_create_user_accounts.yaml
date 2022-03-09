@@ -7,7 +7,6 @@
   vars_files:
     - group_vars/users/user_vars.yaml
     - group_vars/users/vault.yaml
-    - group_vars/vars.yaml
 
   tasks:
     - name: Create users
